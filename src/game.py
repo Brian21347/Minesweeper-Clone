@@ -176,33 +176,6 @@ class Game(Screen):
         pygame.display.update()
         time.sleep(3)
 
-
-    def write_high_score(self, starting_time: int):
-        score = int((pygame.time.get_ticks() - starting_time) / 1000)
-        with open("High Scores.txt") as f:
-            lines = f.read().split("\n")
-        for i, line in enumerate(lines):
-            line = line.split(";")
-            if not len(line):
-                continue
-            if (
-                line[0] == f"{GRID_SIZE[0]}*{GRID_SIZE[1]}"
-                and line[1] == str(MINE_PERCENT)
-                and line[2] == str(NEIGHBORING)
-            ):
-                if int(line[3]) > score:
-                    lines[i] = f"{GRID_SIZE[0]}*{GRID_SIZE[1]};{MINE_PERCENT};{NEIGHBORING};{score}"
-                break
-        else:
-            lines.append(f"{GRID_SIZE[0]}*{GRID_SIZE[1]};{MINE_PERCENT};{NEIGHBORING};{score}")
-        with open("High Scores.txt", mode="w") as f:
-            string = ""
-            for line in lines:
-                if line:
-                    string += line + "\n"
-            f.write(string)
-
-
     def quick_reveal(self, pos):
         n = self.val_at_pos(pos)
         if n == MINE:
@@ -217,14 +190,10 @@ class Game(Screen):
                 unrevealed_neighbors.add(neighbor)
         if n == 0:
             for unrevealed_neighbor in unrevealed_neighbors:
-                # if self.val_at_pos(unrevealed_neighbor) == 0:
                 self.reveal_zero_tiles(unrevealed_neighbor)
-            # self.revealed |= unrevealed_neighbors
         if n == num_unrevealed:
             for unrevealed in unrevealed_neighbors:
-                # if len(self.flagged) != NUM_MINES:
                 self.flagged.add(unrevealed)
-        # return self.revealed, self.flagged
 
 
     def reveal_zero_tiles(self, pos: Position):
@@ -352,7 +321,3 @@ class Game(Screen):
     
     def did_win(self):
         return self.won
-
-
-# if __name__ == "__main__":
-    # Game()
