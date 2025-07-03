@@ -27,9 +27,8 @@ pygame.init()
 CLOCK = pygame.time.Clock()
 MAX_FPS = 60
 
-FLAG_IMAGE_PATH = join("assets", "Minesweeper flag.png")
-WATCH_IMAGE_PATH = join("assets", "Stopwatch.png")
-MINE_IMAGE_PATH = join("assets", "mine.gif")
+MINE_IMAGE_PATH = join("src", "assets", "mine.gif")
+HIGH_SCORES_PATH = join("src", "High Scores.txt")
 
 pygame.display.set_caption("Minesweeper")
 ICON = pygame.image.load(MINE_IMAGE_PATH)
@@ -50,7 +49,7 @@ def main():
 
 def write_high_score(starting_time: int):
     score = int((pygame.time.get_ticks() - starting_time) / 1000)
-    with open("High Scores.txt") as f:
+    with open(HIGH_SCORES_PATH) as f:
         lines = f.read().split("\n")
     for i, line in enumerate(lines):
         line = line.split(";")
@@ -66,7 +65,7 @@ def write_high_score(starting_time: int):
             break
     else:
         lines.append(f"{GRID_SIZE[0]}*{GRID_SIZE[1]};{MINE_PERCENT};{NEIGHBORING};{score}")
-    with open("High Scores.txt", mode="w") as f:
+    with open(HIGH_SCORES_PATH, mode="w") as f:
         string = ""
         for line in lines:
             if line:
