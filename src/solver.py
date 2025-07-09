@@ -1,7 +1,8 @@
 from itertools import combinations
-from typing import Literal, Callable, Iterable
+from typing import Literal, Callable, Iterable, overload
 from time import perf_counter
 from colorama import Fore, Back
+from copy import deepcopy
 
 PlayerPosition = list[list[int | Literal[".", "F", "R"]]]
 MineField = list[list[int | Literal["M"]]]
@@ -28,7 +29,10 @@ REVEALED = "R"
 
 
 def verifier(
-    position: PlayerPosition, mine_field: MineField, to_reveal: PositionSet, to_flag: PositionSet
+    position: PlayerPosition,
+    mine_field: MineField,
+    to_reveal: Iterable[Position],
+    to_flag: Iterable[Position],
 ):
     """
     Checks that moves made by the solver are correct. Assumes all past moves are correct.
@@ -40,16 +44,18 @@ def verifier(
     assert all(FLAG not in row for row in mine_field), "The mine field has a flag in it"
     for r, c in to_reveal:
         if mine_field[r][c] == MINE:
+            print_position(position)
             raise ValueError("Solver tried revealing a mine")
         position[r][c] = mine_field[r][c]  # type: ignore
     for r, c in to_flag:
         if mine_field[r][c] != MINE:
+            print_position(position)
             raise ValueError("Solver flagging a non mine")
         position[r][c] = FLAG
 
 
 def bind_verifier(mine_field: MineField):
-    def func(position: PlayerPosition, to_reveal: PositionSet, to_flag: PositionSet):
+    def func(position: PlayerPosition, to_reveal: Iterable[Position], to_flag: Iterable[Position]):
         verifier(position, mine_field, to_reveal, to_flag)
 
     return func
@@ -60,7 +66,7 @@ class Solver:
         self,
         num_mines: int,
         position: PlayerPosition,
-        verifier: Callable[[PlayerPosition, PositionSet, PositionSet], None],
+        verifier: Callable[[PlayerPosition, Iterable[Position], Iterable[Position]], None],
     ) -> None:
         self.num_mines = num_mines
         self.position = position
@@ -70,6 +76,24 @@ class Solver:
         self.num_columns = len(position[0])
 
         self.bordering = set(self.find_all_bordering())
+
+    def solve(self):
+        revealed, flagged = set(), set()
+        while (val := self.solve_step())[0]:
+            revealed |= val[1][0]
+            flagged |= val[1][1]
+        # to_reveal, to_flag = self.brute_force(2)
+        # if bool(to_reveal) or bool(to_flag):
+        #     print_marked(
+        #         self.position,
+        #         {
+        #             frozenset(to_reveal): Fore.GREEN + "R" + Fore.RESET,
+        #             frozenset(to_flag): Fore.GREEN + "F" + Fore.RESET,
+        #         },
+        #     )
+        #     print("Brute force revealed something")
+        # return revealed | to_reveal, flagged | to_flag
+        return revealed, flagged
 
     def find_all_bordering(self):
         for row in range(self.num_rows):
@@ -88,57 +112,76 @@ class Solver:
 
     def solve_step(self, tentative=False):
         sets = self.get_sets()
-        print("initial:", sets)
         self.check_subsets(sets)
         self.check_squeezes(sets)
         self.check_subsets(sets)
-        print(sets)
         changed = self.apply_basic_logic(sets, tentative)
         if not tentative:
             self.update_bordering()
         return (bool(changed[0]) or bool(changed[1])), changed
 
-    def brute_force(self):
-        def dfs(marked_mines: frozenset[Position]):
-            print("Start dfs with")
-            print_marked(self.position, marked_mines)
-            print_position(self.position)
-            nonlocal total_checks
+    def brute_force(self, max_depth):
+        possible_mine_positions = set()
+
+        def dfs(flagged: PositionSet, depth=0):
+            nonlocal possible_mine_positions
+            if self.num_mines < len(flagged):
+                return
+            mark_flagged = set()
+            try:
+                while (changed := self.solve_step(tentative=True))[0]:
+                    mark_flagged |= changed[1][1]
+            except ValueError:
+                return
             sets = self.get_sets()
-            if not sets and marked_mines not in possible_mine_positions and self.position_is_valid():
-                possible_mine_positions.add(marked_mines)
-                print_position(self.position)
-            original_position = [row.copy() for row in self.position]
+            if not sets:  # no empty unknown positions neighboring the initial bordering positions
+                if len(flagged | mark_flagged) > self.num_mines:
+                    return
+                if not self.position_is_valid():
+                    return
+                possible_mine_positions.add(frozenset(flagged | mark_flagged))
+                return
+            possible_combos = set()  # get unique mine placements
             while sets:
                 group, val = sets.popitem()
-                for mines in combinations(group, val):
-                    total_checks += 1
-                    self.position = [row.copy() for row in original_position]
-                    self.mark_tentatively((), mines)
-                    flagged = set()
-                    # try:
-                    while (changed := self.solve_step(tentative=True))[0]:
-                        flagged |= changed[1][0]
-                    # except ValueError:
-                    #     continue
-                    dfs(marked_mines | frozenset(mines) | frozenset(flagged))
+                for mine_combo in combinations(group, val):
+                    possible_combos.add(frozenset(mine_combo))
+            if depth >= max_depth:
+                return
+            original_position = deepcopy(self.position)
+            for mine_combo in possible_combos:
+                self.mark_tentatively([], mine_combo)
+                dfs(flagged | mine_combo | mark_flagged, depth + 1)
+                self.position = deepcopy(original_position)
 
-        possible_mine_positions: set[frozenset[Position]] = set()
-        original_position = [row.copy() for row in self.position]
-        total_checks = 0
-        dfs(frozenset())
-        self.position = original_position
-        
-        print([set(group) for group in possible_mine_positions])
-        must_be_mines = frozenset.intersection(*possible_mine_positions)
-        must_be_safe = frozenset.union(*self.get_sets()) - frozenset.union(*possible_mine_positions)
-        new_board = [row.copy() for row in original_position]
-        for r, c in must_be_mines:
-            new_board[r][c] = "F"
-        for r, c in must_be_safe:
-            new_board[r][c] = "R"
-        print_position(new_board)
-        print("Total checks:", total_checks)
+        orig = deepcopy(self.position)
+        dfs(set())
+        self.position = orig
+        if not possible_mine_positions:
+            return set(), set()
+        always_mines = frozenset.intersection(*possible_mine_positions)
+        unrevealed = frozenset(
+            (nr, nc)
+            for r, c in self.bordering
+            for nr, nc in self.neighbors(r, c)
+            if self.position[nr][nc] == UNKNOWN
+        )
+        never_mines = unrevealed - frozenset.union(*possible_mine_positions)
+        try:
+            self.verifier(self.position, never_mines, always_mines)
+        except ValueError as e:
+            print(e)
+            print("Mines:", always_mines)
+            print("Revealed:", never_mines)
+        # print("FINAL:")
+        # print_marked(
+        #     self.position,
+        #     {
+        #         always_mines: Fore.GREEN + FLAG + Fore.RESET,
+        #         never_mines: Fore.GREEN + REVEALED + Fore.RESET,
+        #     },
+        # )
+        return set(never_mines), set(always_mines)
 
     def position_is_valid(self):
         """
@@ -188,12 +231,13 @@ class Solver:
             self.mark_tentatively(to_reveal, to_flag)
         else:
             self.verifier(self.position, to_reveal, to_flag)
+            self.num_mines -= len(to_flag)
         return to_reveal, to_flag
 
     def mark_tentatively(self, to_reveal: Iterable, to_flag: Iterable):
         for r, c in to_reveal:
             if self.position[r][c] != UNKNOWN:
-                raise IndentationError
+                raise ValueError
             self.position[r][c] = REVEALED
         for r, c in to_flag:
             if self.position[r][c] != UNKNOWN:
@@ -210,7 +254,8 @@ class Solver:
                 n_val = self.position[nr][nc]
                 if n_val == UNKNOWN:
                     group.add((nr, nc))
-                elif n_val == FLAG:
+                    continue
+                if n_val == FLAG:
                     val -= 1
             if val < 0:
                 raise ValueError
@@ -302,26 +347,46 @@ class Solver:
     def is_revealed(val) -> bool:
         return isinstance(val, int) or val == REVEALED
 
+    def update_position(self, position: PlayerPosition):
+        self.position = position
+        self.num_rows = len(position)
+        self.num_columns = len(position[0])
+        self.bordering = set(self.find_all_bordering())
+
+    def update_num_mines(self, num_mines: int):
+        if num_mines < 0:
+            raise ValueError("num_mines must be a non negative integer")
+        self.num_mines = num_mines
+
+    def update(self, num_mines: int, position: PlayerPosition):
+        self.update_num_mines(num_mines)
+        self.update_position(position)
+
 
 def print_position(position: PlayerPosition):
     def convert(val: int | str) -> str:
         if val == UNKNOWN:
-            fore = Fore.BLACK
+            fore = Fore.LIGHTBLACK_EX
         elif val == FLAG:
-            fore = Fore.RED
+            fore = Fore.LIGHTRED_EX
         elif val == REVEALED:
             fore = Fore.CYAN
+        elif val == MINE:
+            fore = Fore.GREEN
         else:
-            fore = Fore.WHITE
+            return str(val)
         return fore + str(val) + Fore.RESET
+
     for row in position:
         print("".join(map(convert, row)))
+    print()
 
 
-def print_marked(position: PlayerPosition, mines: frozenset[Position]):
-    tmp = [row.copy() for row in position]
-    for r, c in mines:
-        tmp[r][c] = "F"
+def print_marked(position: PlayerPosition, marked: dict[frozenset[Position], str]):
+    tmp: list = deepcopy(position)
+    for group, marker in marked.items():
+        for r, c in group:
+            tmp[r][c] = marker
     print_position(tmp)
 
 
@@ -335,25 +400,17 @@ def main():
 
     # region strings
     str_position = """
-00001..
-000013.
-000001.
-000001.
-110123.
-.213...
-.......
+    .....
+    ..2..
+    122..
+    01F2.
+    012..
+    001..
     """
     str_mine_field = """
-00001MM
-0000134
-000001M
-0000011
-1101232
-M213MMM
-M31MM63
     """
     # endregion
-    num_mines = 9
+    num_mines = 100
     # region parsing
     position: PlayerPosition = []
     for row in str_position.splitlines():
@@ -369,27 +426,26 @@ M31MM63
         mine_field.append(list(map(to_int, row)))  # type: ignore
     # endregion
     solver = Solver(num_mines, position, bind_verifier(mine_field))
-    
-    # start = perf_counter()
-    # while solver.solve_step()[0]:
-    #     print_position(solver.position)
-    #     pass
-    # end = perf_counter()
-    # print(f"Finished in {end - start:.3f} secs")
-    # solved = True
-    # for row1, row2 in zip(position, mine_field):
-    #     if not all(a == b for a, b in zip(row1, row2) if a != FLAG):
-    #         solved = False
-    #         break
-    # print(f"SOLVED: {solved}")
-
-    start = perf_counter()
-    solver.brute_force()
-    end = perf_counter()
-    print(f"Finished in {end - start:.5f} secs")
-    # bordering = {(2, 4), (0, 4), (3, 1), (1, 4), (3, 0), (2, 3), (2, 2), (3, 2)}
-    # solver.bordering = bordering
-    # print(solver.get_sets())
+    SOLVE = False
+    if SOLVE:
+        start = perf_counter()
+        while solver.solve_step()[0]:
+            print_position(solver.position)
+            pass
+        end = perf_counter()
+        print(f"Finished in {end - start:.3f} secs")
+        solved = True
+        for row1, row2 in zip(position, mine_field):
+            if not all(a == b for a, b in zip(row1, row2) if a != FLAG):
+                solved = False
+                break
+        print(f"SOLVED: {solved}")
+    else:
+        start = perf_counter()
+        solver.brute_force(20)
+        print_position(solver.position)
+        end = perf_counter()
+        print(f"Finished in {end - start:.5f} secs")
 
 
 if __name__ == "__main__":

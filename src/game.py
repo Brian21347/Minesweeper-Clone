@@ -1,4 +1,4 @@
-from screen import Screen
+# from screen import Screen
 import time
 import pygame
 import sys
@@ -6,6 +6,7 @@ from random import randrange
 from os.path import join
 from itertools import product
 from typing import Literal
+from solver import Solver, bind_verifier, PlayerPosition, print_position, print_marked
 
 
 # region game modes
@@ -21,9 +22,9 @@ KNIGHT = [
     [-2, -1],
 ]
 NEIGHBORING = STANDARD  # edit this to change the game mode!
-MINE_PERCENT = 0.25
+MINE_PERCENT = 0.24
 assert MINE_PERCENT < 1, "MINE_PERCENT must be less than 1"
-GRID_SIZE = 24, 20  # (number of rows, number of columns)
+GRID_SIZE = 20, 24  # (number of rows, number of columns)
 CORNERS = [
     # topleft
     *[(0, 0), (0, 1), (1, 0), (1, 1)],
@@ -91,9 +92,9 @@ PositionSet = set[Position]
 # endregion
 
 
-class Game(Screen):
+class Game:
     def __init__(self, screen: pygame.Surface) -> None:
-        super().__init__(screen)
+        self.screen = screen
         self.mine_field: Grid = []
         self.mine_positions: PositionSet = set()
         self.won = False
@@ -101,12 +102,19 @@ class Game(Screen):
         self.revealed: PositionSet = set()
         self.flagged: PositionSet = set()
         self.starting_time = pygame.time.get_ticks()
-    
+        self.solver = None
+        # screen_size = self.screen.get_size()
+        # self.field_surf = pygame.surface.Surface(screen_size)
+        # self.uncovered_surf = pygame.surface.Surface(screen_size)
+        # self.flag_surf = pygame.surface.Surface(screen_size)
+
     def get_block_size(self):
-        return int(min(
-            self.screen.get_width() / GRID_SIZE[1],
-            (self.screen.get_height() - HEADER_SIZE) / GRID_SIZE[0],
-        ))
+        return int(
+            min(
+                self.screen.get_width() / GRID_SIZE[1],
+                (self.screen.get_height() - HEADER_SIZE) / GRID_SIZE[0],
+            )
+        )
 
     def run(self):
         while True:
@@ -120,14 +128,15 @@ class Game(Screen):
                         sys.exit()
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     self.on_mouse_button_down(event)
-            if len(self.mine_positions & self.flagged) == NUM_MINES:  # all mines self.flagged
+            if len(self.revealed) == GRID_SIZE[0] * GRID_SIZE[1] - NUM_MINES:  # all non-mines revealed
                 self.won = True
                 break
             if any(tile in self.mine_positions for tile in self.revealed):  # a mine self.revealed
                 self.show_mines()
+                pygame.event.clear()
                 self.won = False
                 break
-            self.draw_mine_field()
+            self.draw()
             CLOCK.tick(MAX_FPS)
 
     def on_mouse_button_down(
@@ -143,15 +152,22 @@ class Game(Screen):
             return
         pos = (int((mouse_pos[1] - HEADER_SIZE) // block_size), int(mouse_pos[0] // block_size))
 
+        revealed, flagged = [], []
+        if self.solver is not None:
+            # print_marked(self.get_player_position(), {frozenset({pos}): "X"})
+            self.solver.update(NUM_MINES - len(self.flagged), self.get_player_position())
+            _val, (revealed, flagged) = self.solver.solve_step(tentative=True)
+            # print_marked(self.get_player_position(), {frozenset(revealed): "R", frozenset(flagged): "F"})
         if event.button == pygame.BUTTON_LEFT:
             if pos in self.revealed or pos in self.flagged:
                 return
+            if self.solver is not None:
+                print("Guess" if pos not in revealed else "Correct")
             if self.first_click:
                 self.mine_field_set_up(pos)
-            self.reveal_zero_tiles(pos)
-            if self.first_click:
-                self.visual_mine_field()
                 self.first_click = False
+            else:
+                self.reveal_tile(pos)
         elif event.button == pygame.BUTTON_MIDDLE:
             if pos not in self.revealed:
                 return
@@ -162,18 +178,20 @@ class Game(Screen):
             if pos in self.flagged:
                 self.flagged.remove(pos)
             elif len(self.flagged) != NUM_MINES:
+                if self.solver is not None:
+                    print("Guess" if pos not in flagged else "Correct")
                 self.flagged.add(pos)
 
-    def visual_mine_field(self):
+    def get_player_position(self):
         """
-        At the start of each output string, there will be two ints, representing the number of flags and the total number of mines.
+        Return a version of the minefield that the player would be seeing
         0-8: Neighboring tile values
-        ?  : Unknown
+        .  : Unknown
         F  : Flagged
         """
         self.flagged
         self.revealed
-        field: list[list[int | str]] = []
+        field: PlayerPosition = []
         for x, row in enumerate(self.mine_field):
             field.append([])
             for y, val in enumerate(row):
@@ -182,9 +200,16 @@ class Game(Screen):
                     field[-1].append("F")
                     continue
                 if pos in self.revealed:
-                    field[-1].append(val)
+                    field[-1].append(int(val))
                     continue
-                field[-1].append("?")
+                field[-1].append(".")
+        return field
+    
+    def save_to_file(self):
+        """
+        Saves the initially revealed position to a file
+        """
+        field = self.get_player_position()
         with open("Tests.txt", "a") as f:
             print(NUM_MINES, file=f)
             for row in field:
@@ -248,12 +273,12 @@ class Game(Screen):
                 unrevealed_neighbors.add(neighbor)
         if n == 0:
             for unrevealed_neighbor in unrevealed_neighbors:
-                self.reveal_zero_tiles(unrevealed_neighbor)
+                self.reveal_tile(unrevealed_neighbor)
         if n == num_unrevealed:
             for unrevealed in unrevealed_neighbors:
                 self.flagged.add(unrevealed)
 
-    def reveal_zero_tiles(self, pos: Position):
+    def reveal_tile(self, pos: Position):
         if self.val_at_pos(pos) != 0:
             self.revealed |= {pos}
             return
@@ -277,7 +302,7 @@ class Game(Screen):
         self.revealed |= just_revealed
         assert self.flagged & just_revealed == set(), "No revealed mines should have been flagged"
 
-    def draw_mine_field(self):
+    def draw(self):
         block_size = self.get_block_size()
 
         starting_color = (74, 117, 44)
@@ -371,10 +396,13 @@ class Game(Screen):
             for nr, nc in self.neighbors((r, c)):
                 if (nr, nc) in self.mine_positions:
                     continue
-                assert (
-                    self.mine_field[nr][nc] != "M"
-                ), "Mine not marked in mine_locations"
+                assert self.mine_field[nr][nc] != "M", "Mine not marked in mine_locations"
                 self.mine_field[nr][nc] += 1  # type: ignore
+        self.reveal_tile(mouse_pos)
+        self.solver = Solver(NUM_MINES, self.get_player_position(), bind_verifier(self.mine_field))
+        # revealed, flagged = solver.solve()
+        # self.revealed |= revealed
+        # self.flagged |= flagged
 
     def neighbors(self, pos: Position):
         r, c = pos

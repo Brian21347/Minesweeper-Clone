@@ -1,0 +1,56 @@
+{
+  "background color": "#FFF",
+  "header": {
+    "color": "#4A752C",
+    "height": 50
+  },
+  "mine field": {
+    "surf size": [750, 750],
+    "colors": {
+      "light field": "#AAD751",
+      "dark field": "#A2D149",
+      "light empty": "#E5C29F",
+      "dark empty": "#D7B899",
+      "light field highlight": "#BFE17D",
+      "dark field highlight": "#B9DD77",
+      "light empty highlight": "#ECD1B7",
+      "dark empty highlight": "#E1CAB3",
+      "separator color": "#87AF3A"
+    },
+    "cell colors": {
+      "1": "#1976D2",
+      "2": "#388E3C",
+      "3": "#D32F2F",
+      "4": "#7B1FA2",
+      "5": "#FF8F00",
+      "6": "#0097A7",
+      "7": "#5C4D35",
+      "8": "#B7B09D",
+      "M": "red"
+    }
+  },
+  "STANDARD": [
+    [-1, -1],
+    [-1, 0],
+    [-1, 1],
+    [0, -1],
+    [0, 1],
+    [1, -1],
+    [1, 0],
+    [1, 1]
+  ],
+  "KNIGHT": [
+    [1, 2],
+    [1, -2],
+    [2, 1],
+    [2, -1],
+    [-1, 2],
+    [-1, -2],
+    [-2, 1],
+    [-2, -1]
+  ],
+  "neighboring pattern": "STANDARD",
+  "mine percent": 0.2,
+  "grid size": [18, 14],
+  "max fps": 60
+}
