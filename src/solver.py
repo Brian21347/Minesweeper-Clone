@@ -77,9 +77,9 @@ class Solver:
 
         self.bordering = set(self.find_all_bordering())
 
-    def solve(self):
+    def solve(self, tentative):
         revealed, flagged = set(), set()
-        while (val := self.solve_step())[0]:
+        while (val := self.solve_step(tentative))[0]:
             revealed |= val[1][0]
             flagged |= val[1][1]
         # to_reveal, to_flag = self.brute_force(2)

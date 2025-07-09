@@ -7,6 +7,7 @@ from os.path import join
 from itertools import product
 from typing import Literal
 from solver import Solver, bind_verifier, PlayerPosition, print_position, print_marked
+from colorama import Fore
 
 
 # region game modes
@@ -69,6 +70,8 @@ COLOR_PALETTE = {
     7: "dark gray",
     8: "black",
     MINE: "red",
+    "R": "dark green",
+    "F": "dark red",
 }
 LIGHT_FIELD = (150, 195, 61)
 DARK_FIELD = (137, 184, 53)
@@ -90,6 +93,9 @@ Position = tuple[int, int]
 Grid = list[list[int | Literal["M"]]]
 PositionSet = set[Position]
 # endregion
+
+SHOW_SOLVER_CONCLUSION = True
+EXPERT_MODE = True
 
 
 class Game:
@@ -127,60 +133,87 @@ class Game:
                         pygame.quit()
                         sys.exit()
                 if event.type == pygame.MOUSEBUTTONDOWN:
+                    if EXPERT_MODE and self.is_guess(event):
+                        self.make_loss_position()
+                        self.lose()
+                        return
                     self.on_mouse_button_down(event)
             if len(self.revealed) == GRID_SIZE[0] * GRID_SIZE[1] - NUM_MINES:  # all non-mines revealed
                 self.won = True
-                break
-            if any(tile in self.mine_positions for tile in self.revealed):  # a mine self.revealed
-                self.show_mines()
-                pygame.event.clear()
-                self.won = False
-                break
+                return
+            if any(tile in self.mine_positions for tile in self.revealed):  # a mine was revealed
+                self.lose()
+                return
             self.draw()
             CLOCK.tick(MAX_FPS)
+
+    def lose(self):
+        self.show_mines()
+        pygame.event.clear()
+        self.won = False
 
     def on_mouse_button_down(
         self,
         event: pygame.event.Event,
     ):
-        mouse_pos = pygame.mouse.get_pos()
-        block_size = self.get_block_size()
-        if not (
-            0 <= mouse_pos[0] <= block_size * GRID_SIZE[1]
-            and HEADER_SIZE <= mouse_pos[1] <= block_size * GRID_SIZE[0] + HEADER_SIZE
-        ):
+        mouse_pos = self.get_mouse_pos()
+        if not 0 <= mouse_pos[0] < GRID_SIZE[1] and 0 <= mouse_pos[1] < GRID_SIZE[0]:
             return
-        pos = (int((mouse_pos[1] - HEADER_SIZE) // block_size), int(mouse_pos[0] // block_size))
 
-        revealed, flagged = [], []
-        if self.solver is not None:
-            # print_marked(self.get_player_position(), {frozenset({pos}): "X"})
-            self.solver.update(NUM_MINES - len(self.flagged), self.get_player_position())
-            _val, (revealed, flagged) = self.solver.solve_step(tentative=True)
-            # print_marked(self.get_player_position(), {frozenset(revealed): "R", frozenset(flagged): "F"})
         if event.button == pygame.BUTTON_LEFT:
-            if pos in self.revealed or pos in self.flagged:
-                return
-            if self.solver is not None:
-                print("Guess" if pos not in revealed else "Correct")
+            if mouse_pos in self.revealed or mouse_pos in self.flagged:
+                return 
             if self.first_click:
-                self.mine_field_set_up(pos)
+                self.mine_field_set_up(mouse_pos)
                 self.first_click = False
             else:
-                self.reveal_tile(pos)
+                self.reveal_tile(mouse_pos)
         elif event.button == pygame.BUTTON_MIDDLE:
-            if pos not in self.revealed:
+            if mouse_pos not in self.revealed:
                 return
-            self.quick_reveal(pos)
+            self.quick_reveal(mouse_pos)
         elif event.button == pygame.BUTTON_RIGHT:
-            if pos in self.revealed:
+            if mouse_pos in self.revealed:
                 return
-            if pos in self.flagged:
-                self.flagged.remove(pos)
+            if mouse_pos in self.flagged:
+                self.flagged.remove(mouse_pos)
             elif len(self.flagged) != NUM_MINES:
-                if self.solver is not None:
-                    print("Guess" if pos not in flagged else "Correct")
-                self.flagged.add(pos)
+                self.flagged.add(mouse_pos)
+    
+    def is_guess(self, event: pygame.event.Event):
+        revealed, flagged = [], []
+        if self.solver is None:
+            return None
+        self.solver.update(NUM_MINES - len(self.flagged), self.get_player_position())
+        revealed, flagged = self.solver.solve(True)
+
+        mouse_pos = self.get_mouse_pos()
+        if not 0 <= mouse_pos[0] < GRID_SIZE[1] and 0 <= mouse_pos[1] < GRID_SIZE[0]:
+            return False
+        if event.button == pygame.BUTTON_LEFT:
+            if mouse_pos in self.revealed or mouse_pos in self.flagged:
+                return False
+            if mouse_pos not in revealed:
+                return True
+        return False
+
+    def make_loss_position(self):
+        assert self.solver
+        moved_mine = self.get_mouse_pos()
+        unflagged_positions = self.mine_positions - self.flagged - {moved_mine}
+        print_marked(self.get_player_position(), {unflagged_positions: Fore.GREEN + "R" + Fore.RESET})
+        self.mine_positions.remove(unflagged_positions.pop())
+        self.mine_positions.add(moved_mine)
+        self.flagged.add(moved_mine)  # tell the solver that the revealed location is a mine
+        print_position(self.get_player_position())
+        self.solver.update_position(self.get_player_position())
+        self.flagged.remove(moved_mine)
+        _, flagged = self.solver.solve(tentative=True)
+        for pos in flagged:
+            if pos in flagged:
+                continue
+            self.mine_positions.add(pos)
+            self.mine_positions.remove(unflagged_positions.pop())
 
     def get_player_position(self):
         """
@@ -311,14 +344,10 @@ class Game:
             self.screen, starting_color, pygame.rect.Rect(150, 0, block_size, block_size)
         )
 
-        mouse_pos = pygame.mouse.get_pos()
-        converted_mouse_pos = (
-            int((mouse_pos[1] - HEADER_SIZE) // block_size),
-            int(mouse_pos[0] // block_size),
-        )
-        to_highlight = {converted_mouse_pos}
-        if converted_mouse_pos in self.revealed:
-            to_highlight |= set(self.neighbors(converted_mouse_pos))
+        mouse_pos = self.get_mouse_pos()
+        to_highlight = {mouse_pos}
+        if mouse_pos in self.revealed:
+            to_highlight |= set(self.neighbors(mouse_pos))
 
         image = pygame.transform.scale(pygame.image.load(FLAG_IMAGE_PATH), (47, 47))
         self.screen.blit(image, [55, 2])
@@ -327,6 +356,12 @@ class Game:
         self.screen.blit(clock_image, [186, 2])
         time = min(int((pygame.time.get_ticks() - self.starting_time) / 1000), 99999)
         self.make_text([233, 25], time, 50, "white")
+
+
+        revealed, flagged = [], []
+        if SHOW_SOLVER_CONCLUSION and self.solver is not None:
+            self.solver.update(NUM_MINES - len(self.flagged), self.get_player_position())
+            revealed, flagged = self.solver.solve(tentative=True)
 
         for r in range(GRID_SIZE[0]):
             for c in range(GRID_SIZE[1]):
@@ -355,6 +390,13 @@ class Game:
                         pygame.image.load(FLAG_IMAGE_PATH), (block_size, block_size)
                     )
                     self.screen.blit(image, [c * block_size, r * block_size + HEADER_SIZE])
+                if SHOW_SOLVER_CONCLUSION:
+                    if (r, c) in revealed:
+                        pos = [(c + 0.5) * block_size, (r + 0.5) * block_size + HEADER_SIZE]
+                        self.draw_tile_nums(pos, "R", block_size)
+                    if (r, c) in flagged:
+                        pos = [(c + 0.5) * block_size, (r + 0.5) * block_size + HEADER_SIZE]
+                        self.draw_tile_nums(pos, "F", block_size)
 
         pygame.display.update()
 
@@ -400,9 +442,6 @@ class Game:
                 self.mine_field[nr][nc] += 1  # type: ignore
         self.reveal_tile(mouse_pos)
         self.solver = Solver(NUM_MINES, self.get_player_position(), bind_verifier(self.mine_field))
-        # revealed, flagged = solver.solve()
-        # self.revealed |= revealed
-        # self.flagged |= flagged
 
     def neighbors(self, pos: Position):
         r, c = pos
@@ -419,3 +458,8 @@ class Game:
 
     def did_win(self):
         return self.won
+    
+    def get_mouse_pos(self):
+        mouse_pos = pygame.mouse.get_pos()
+        block_size = self.get_block_size()
+        return (int((mouse_pos[1] - HEADER_SIZE) // block_size), int(mouse_pos[0] // block_size))
