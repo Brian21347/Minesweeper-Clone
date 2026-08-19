@@ -83,9 +83,9 @@ DARK_EMPTY = (215, 184, 154)
 CLOCK = pygame.time.Clock()
 MAX_FPS = 60
 
-FLAG_IMAGE_PATH = join("src", "assets", "Minesweeper flag.png")
-WATCH_IMAGE_PATH = join("src", "assets", "Stopwatch.png")
-MINE_IMAGE_PATH = join("src", "assets", "mine.gif")
+FLAG_IMAGE_PATH = join("assets", "Minesweeper flag.png")
+WATCH_IMAGE_PATH = join("assets", "Stopwatch.png")
+MINE_IMAGE_PATH = join("assets", "mine.gif")
 # endregion
 
 # region types

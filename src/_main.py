@@ -27,8 +27,8 @@ pygame.init()
 CLOCK = pygame.time.Clock()
 MAX_FPS = 60
 
-MINE_IMAGE_PATH = join("src", "assets", "mine.gif")
-HIGH_SCORES_PATH = join("src", "High Scores.txt")
+MINE_IMAGE_PATH = join("assets", "mine.gif")
+HIGH_SCORES_PATH = join("High Scores.txt")
 
 pygame.display.set_caption("Minesweeper")
 ICON = pygame.image.load(MINE_IMAGE_PATH)

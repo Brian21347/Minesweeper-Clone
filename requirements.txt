@@ -1,0 +1,4 @@
+pygame-ce
+pydantic
+colorama
+pytest
