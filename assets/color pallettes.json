@@ -1,0 +1,27 @@
+{
+  "default": {
+    "background": "#20978d",
+    "header_color": "#4a752c",
+    "light_field": "#aad751",
+    "dark_field": "#a2d149",
+    "light_empty": "#e5c29f",
+    "dark_empty": "#d7b899",
+    "light_field_highlight": "#bfe17d",
+    "dark_field_highlight": "#b9dd77",
+    "light_empty_highlight": "#ecd1b7",
+    "dark_empty_highlight": "#e1cab3",
+    "separator_color": "#87af3a",
+    "cell_colors": [
+      "#1976d2",
+      "#388e3c",
+      "#d32f2f",
+      "#7b1fa2",
+      "#ff8f00",
+      "#0097a7",
+      "#5c4d35",
+      "#b7b09d"
+    ],
+    "revealed": "dark green",
+    "flagged": "dark red"
+  }
+}
