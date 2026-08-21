@@ -17,10 +17,10 @@ class Pos:
     def is_valid(self) -> bool:
         return 0 <= self.r < Pos.width and 0 <= self.c < Pos.height
 
-    def __add__(self, other: Pos):
+    def __add__(self, other: "Pos"):
         return Pos(self.r + other.r, self.c + other.c)
 
-    def __sub__(self, other: Pos):
+    def __sub__(self, other: "Pos"):
         return Pos(self.r - other.r, self.c - other.c)
 
     def __eq__(self, other: object):
