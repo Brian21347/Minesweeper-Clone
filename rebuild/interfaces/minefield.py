@@ -19,6 +19,7 @@ class MineField:
     __grid: list[list[int | MINE]]
     __mine_positions: set[Pos]
     __revealed: set[Pos]
+    __flagged: set[Pos]
 
     def __init__(self, size: tuple[int, int], num_mines: int) -> None:
         self.size = size
@@ -26,6 +27,7 @@ class MineField:
         self.num_mines = num_mines
         self.__grid = [[0] * size[1] for _ in range(size[0])]
         self.__revealed = set()
+        self.__flagged = set()
 
     def generate(self, revealed_location: Pos):
         possible_locations = set(
@@ -52,26 +54,32 @@ class MineField:
             )
         for pos in self.__mine_positions:
             try:
-                self.__grid[pos.row][pos.col] = "M"
+                self.__grid[pos.r][pos.c] = "M"
             except:
                 print(pos)
                 raise ValueError
             for neighbor in MineField.neighbors(pos):
                 if neighbor in self.__mine_positions:
                     continue
-                self.__grid[neighbor.row][neighbor.col] += 1  # type: ignore
+                self.__grid[neighbor.r][neighbor.c] += 1  # type: ignore
         self.mark_reveled(revealed_location)
 
     def get_value(self, pos: Pos):
         if not pos.is_valid():
             raise ValueError
-        return self.__grid[pos.row][pos.col]
+        return self.__grid[pos.r][pos.c]
 
     @staticmethod
     def neighbors(pos: Pos) -> Generator[Pos, None, None]:
         for dr, dc in ADJACENCY:
             if (npos := pos + Pos(dr, dc)).is_valid():
                 yield npos
+
+    def is_revealed(self, pos: Pos):
+        return pos in self.__revealed
+    
+    def is_flagged(self, pos: Pos):
+        return pos in self.__flagged
 
     def mark_reveled(self, pos: Pos):
         if not pos.is_valid() or pos in self.__revealed:
@@ -81,12 +89,23 @@ class MineField:
             for neighbor in self.neighbors(pos):
                 self.mark_reveled(neighbor)
         
+    def flag(self, pos: Pos):
+        self.__flagged.add(pos)
     
-    def for_all(self):
-        for r, row in enumerate(self.__grid):
-            for c, val in enumerate(row):
-                if Pos(r, c) in self.__revealed:
-                    yield r, c, val 
+    def all_revealed(self):
+        for pos in self.__revealed:
+            yield pos, self.get_value(pos)
+    
+    def from_grid(self, grid: list[list[int | Literal["M"]]], start: Pos):
+        self.__grid = grid
+        self.size = len(grid), len(grid[0])
+        self.__revealed = set()
+        self.__flagged = set()
+        self.mark_reveled(start)
+    
+    def all_flagged(self):
+        for pos in self.__flagged:
+            yield pos
 
     def __str__(self):
         def hex_to_ascii(hex_code: str):
