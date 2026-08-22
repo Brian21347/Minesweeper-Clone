@@ -6,7 +6,7 @@ class Pos:
     height: int = -1
 
     @classmethod
-    def set_bounds(cls, width, height):
+    def set_bounds(cls, width: int, height: int):
         cls.width = width
         cls.height = height
 
@@ -34,6 +34,9 @@ class Pos:
 
     def __str__(self) -> str:
         return f"({self.r}, {self.c})"
+
+    def __repr__(self) -> str:
+        return f"Pos({self.r}, {self.c})"
 
     def __hash__(self) -> int:
         return hash((self.r, self.c))

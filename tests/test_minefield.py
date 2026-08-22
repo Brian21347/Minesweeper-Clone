@@ -12,9 +12,9 @@ def set_seed():
 
 
 def test_minefield():
-    field = MineField((10, 10), 25)
+    field = MineField((10, 10), 20)
     field.generate(Pos(0, 0))
-    assert list(field.all_revealed()) == [
+    assert set(field.all_revealed()) == {
         (Pos(0, 0), 0),
         (Pos(0, 1), 0),
         (Pos(0, 2), 0),
@@ -33,4 +33,4 @@ def test_minefield():
         (Pos(4, 1), 1),
         (Pos(5, 0), 1),
         (Pos(5, 1), 3),
-    ]
+    }

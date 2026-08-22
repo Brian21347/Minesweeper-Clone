@@ -1,23 +1,23 @@
+from collections.abc import Generator
 from itertools import product
 from math import ceil
-from typing import Literal
-from collections.abc import Generator
-from rebuild.interfaces.position import Pos
 from random import shuffle
+
 from colorama import Fore
+
+from rebuild.interfaces.aliases import *
+from rebuild.interfaces.position import Pos
 from rebuild.settings import (
+    ADJACENCY,
     CENTER_DISPERSAL_RADIUS,
     CORNER_DISPERSAL_RADIUS,
     CORNERS,
-    ADJACENCY,
     color_pallette,
 )
 
 
 class MineField:
-    MINE = Literal["M"]
-    FIELD_VALUE = int | MINE
-    __grid: list[list[FIELD_VALUE]]
+    __grid: list[list[MineFieldValue]]
     __mine_positions: set[Pos]
     __revealed: set[Pos]
     __flagged: set[Pos]
@@ -65,7 +65,7 @@ class MineField:
                 self.__grid[neighbor.r][neighbor.c] += 1  # type: ignore
         self.mark_reveled(revealed_location)
 
-    def get_value(self, pos: Pos) -> FIELD_VALUE:
+    def get_value(self, pos: Pos) -> MineFieldValue:
         if not pos.is_valid():
             raise ValueError
         return self.__grid[pos.r][pos.c]
@@ -93,11 +93,11 @@ class MineField:
     def flag(self, pos: Pos) -> None:
         self.__flagged.add(pos)
 
-    def all_revealed(self) -> Generator[tuple[Pos, FIELD_VALUE], None, None]:
+    def all_revealed(self) -> Generator[tuple[Pos, MineFieldValue], None, None]:
         for pos in self.__revealed:
             yield pos, self.get_value(pos)
 
-    def from_grid(self, grid: list[list[FIELD_VALUE]], start: Pos) -> None:
+    def from_grid(self, grid: list[list[MineFieldValue]], start: Pos) -> None:
         self.__grid = grid
         self.size = len(grid), len(grid[0])
         self.__revealed = set()
@@ -116,7 +116,7 @@ class MineField:
             b = int(hex_code[4:6], 16)
             return f"\033[38;2;{r};{g};{b}m"
 
-        def convert(pos: Pos, val: MineField.FIELD_VALUE) -> str:
+        def convert(pos: Pos, val: MineFieldValue) -> str:
             if val == "M":
                 return Fore.RED + str(val) + Fore.RESET
             if val == 0:

@@ -1,2 +1,1 @@
 from interfaces.minefield import *
-
